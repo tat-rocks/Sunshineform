@@ -35,6 +35,14 @@ async function sendAgentForm(conversationId) {
   return res.status;
 }
 
+async function sendMessage(conversationId, text) {
+  await fetch(`https://api.smooch.io/v2/apps/${APP_ID}/conversations/${conversationId}/messages`, {
+    method: 'POST',
+    headers: { 'Authorization': suncoAuth(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ author: { type: 'business' }, content: { type: 'text', text } })
+  });
+}
+
 async function passControlToAgent(conversationId) {
   const res = await fetch(`https://api.smooch.io/v2/apps/${APP_ID}/conversations/${conversationId}/passControl`, {
     method: 'POST',
@@ -81,6 +89,7 @@ module.exports = async function handler(req, res) {
         const email = content.fields?.find(f => f.name === 'email')?.value || '';
         console.log('Form submitted:', name, email, 'conv:', convId);
         if (author.userId) await updateSuncoUser(author.userId, name, email);
+        await sendMessage(convId, 'Gracias. Un agente se pondrá en contacto a la brevedad.');
         await passControlToAgent(convId);
         continue;
       }
