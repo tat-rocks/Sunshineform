@@ -74,6 +74,7 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const body = req.body || {};
+  console.log('BODY:', JSON.stringify(body).slice(0, 400));
 
   // Called by Zendesk bot integration (no conversation_id available — just ack)
   if (!body.events) {
