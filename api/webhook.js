@@ -67,5 +67,5 @@ module.exports = async function handler(req, res) {
   const result = await sendAgentForm(conversationId);
 
   // Always return 200 to Zendesk
-  res.status(200).json({ ok: result.status === 201, sunco_status: result.status });
+  res.status(200).json({ ok: result.status === 201, sunco_status: result.status, conversation_id_received: conversationId });
 };
