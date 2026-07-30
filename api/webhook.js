@@ -84,6 +84,7 @@ module.exports = async function handler(req, res) {
   // Called by Sunco webhook with real events
   for (const event of body.events) {
     const { type, payload } = event;
+    console.log('Event:', type, JSON.stringify(payload).slice(0, 200));
 
     if (type === 'conversation:message') {
       const { conversation, message } = payload;
