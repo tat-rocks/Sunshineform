@@ -94,6 +94,11 @@ module.exports = async function handler(req, res) {
 
       // User submitted the form
       if (content.type === 'formResponse') {
+        const messageAge = Date.now() - new Date(message.received).getTime();
+        if (messageAge > 120000) {
+          console.log('Ignoring stale formResponse (age:', Math.round(messageAge / 1000), 's)');
+          continue;
+        }
         const name  = content.fields?.find(f => f.name === 'name')?.value  || '';
         const email = content.fields?.find(f => f.name === 'email')?.value || '';
         console.log('Form submitted:', name, email, 'conv:', convId);
