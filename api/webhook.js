@@ -12,7 +12,16 @@ function zdAuth() {
   return 'Basic ' + Buffer.from(`${ZD_EMAIL}/token:${ZD_TOKEN}`).toString('base64');
 }
 
-const AGENT_KEYWORDS = ['agente', 'agent', 'human', 'humano', 'persona', 'operador', 'contact someone', 'hablar con'];
+const AGENT_KEYWORDS = ['agente', 'agent', 'human', 'humano', 'persona', 'operador', 'hablar con'];
+
+// Dedup: track conversations where form was recently sent (expires after 60s)
+const recentForms = new Map();
+function formAlreadySent(convId) {
+  const ts = recentForms.get(convId);
+  if (ts && Date.now() - ts < 60000) return true;
+  recentForms.set(convId, Date.now());
+  return false;
+}
 
 async function sendAgentForm(conversationId) {
   const res = await fetch(`https://api.smooch.io/v2/apps/${APP_ID}/conversations/${conversationId}/messages`, {
@@ -96,7 +105,7 @@ module.exports = async function handler(req, res) {
 
       // User requested an agent via text
       const text = (content.text || '').toLowerCase();
-      if (AGENT_KEYWORDS.some(kw => text.includes(kw))) {
+      if (AGENT_KEYWORDS.some(kw => text.includes(kw)) && !formAlreadySent(convId)) {
         await sendAgentForm(convId);
       }
     }
@@ -106,7 +115,7 @@ module.exports = async function handler(req, res) {
       const { conversation, postback } = payload;
       console.log('Postback:', postback.payload, 'conv:', conversation.id);
       const p = (postback.payload || '').toLowerCase();
-      if (p.includes('agent') || p.includes('contact') || p.includes('human')) {
+      if ((p.includes('agent') || p.includes('contact') || p.includes('human')) && !formAlreadySent(conversation.id)) {
         await sendAgentForm(conversation.id);
       }
     }
