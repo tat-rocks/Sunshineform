@@ -39,35 +39,33 @@ async function sendAgentForm(conversationId) {
     })
   });
 
-  if (!res.ok) {
-    const err = await res.text();
-    console.error('Error sending form:', err);
-    return { ok: false, error: err };
-  }
-
-  return { ok: true };
+  const responseBody = await res.json();
+  console.log('Sunco response:', res.status, JSON.stringify(responseBody));
+  return { status: res.status, body: responseBody };
 }
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  // Accept conversation_id in any common format
   const body = req.body || {};
+  console.log('Received body:', JSON.stringify(body));
+
   const conversationId =
     body.conversation_id ||
     body.conversationId ||
     body.conversation?.id ||
     body.id;
 
+  console.log('Resolved conversation_id:', conversationId);
+
   if (!conversationId) {
-    return res.status(400).json({ error: 'conversation_id required' });
+    // Return 200 so Zendesk doesn't mark as Failure, but log the issue
+    console.error('No conversation_id found in body:', JSON.stringify(body));
+    return res.status(200).json({ ok: false, reason: 'no_conversation_id', received: body });
   }
 
   const result = await sendAgentForm(conversationId);
 
-  if (!result.ok) {
-    return res.status(500).json({ error: result.error });
-  }
-
-  res.status(200).json({ ok: true, message: 'Form sent' });
+  // Always return 200 to Zendesk
+  res.status(200).json({ ok: result.status === 201, sunco_status: result.status });
 };
