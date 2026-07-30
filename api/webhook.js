@@ -98,7 +98,7 @@ module.exports = async function handler(req, res) {
         const email = content.fields?.find(f => f.name === 'email')?.value || '';
         console.log('Form submitted:', name, email, 'conv:', convId);
         if (author.userId) await updateSuncoUser(author.userId, name, email);
-        await sendMessage(convId, 'Gracias. Un agente se pondrá en contacto a la brevedad.');
+        await sendMessage(convId, 'Thank you. An agent will be in touch with you shortly.');
         await passControlToAgent(convId);
         continue;
       }
