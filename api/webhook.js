@@ -74,7 +74,15 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const body = req.body || {};
-  console.log('BODY:', JSON.stringify(body).slice(0, 400));
+  if (body.events) {
+    for (const ev of body.events) {
+      const p = ev.payload || {};
+      const msg = p.message || {};
+      console.log('EVT:', ev.type, '| author:', msg.author?.type, '| content:', msg.content?.type, '| text:', (msg.content?.text||'').slice(0,80));
+    }
+  } else {
+    console.log('BODY (no events):', JSON.stringify(body).slice(0, 200));
+  }
 
   // Called by Zendesk bot integration (no conversation_id available — just ack)
   if (!body.events) {
