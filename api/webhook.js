@@ -1,23 +1,23 @@
 const APP_ID = process.env.SUNCO_APP_ID;
 const KEY_ID = process.env.SUNCO_KEY_ID;
 const SECRET = process.env.SUNCO_SECRET;
+const ZD_SUBDOMAIN = 'pdi-omycare';
+const ZD_EMAIL = process.env.ZD_EMAIL;
+const ZD_TOKEN = process.env.ZD_TOKEN;
 
-function authHeader() {
+function suncoAuth() {
   return 'Basic ' + Buffer.from(`${KEY_ID}:${SECRET}`).toString('base64');
 }
-
-async function getConversationByUser(userId) {
-  const res = await fetch(`https://api.smooch.io/v2/apps/${APP_ID}/conversations?userId=${userId}&page%5Bsize%5D=1`, {
-    headers: { 'Authorization': authHeader() }
-  });
-  const data = await res.json();
-  return data.conversations?.[0]?.id || null;
+function zdAuth() {
+  return 'Basic ' + Buffer.from(`${ZD_EMAIL}/token:${ZD_TOKEN}`).toString('base64');
 }
+
+const AGENT_KEYWORDS = ['agente', 'agent', 'human', 'humano', 'persona', 'operador', 'contact someone', 'hablar con'];
 
 async function sendAgentForm(conversationId) {
   const res = await fetch(`https://api.smooch.io/v2/apps/${APP_ID}/conversations/${conversationId}/messages`, {
     method: 'POST',
-    headers: { 'Authorization': authHeader(), 'Content-Type': 'application/json' },
+    headers: { 'Authorization': suncoAuth(), 'Content-Type': 'application/json' },
     body: JSON.stringify({
       author: { type: 'business' },
       content: {
@@ -31,38 +31,67 @@ async function sendAgentForm(conversationId) {
       }
     })
   });
-  const body = await res.json();
-  console.log('Sunco sendForm:', res.status, JSON.stringify(body));
-  return { status: res.status, body };
+  console.log('sendAgentForm:', res.status);
+  return res.status;
+}
+
+async function updateSuncoUser(userId, name, email) {
+  await fetch(`https://api.smooch.io/v2/apps/${APP_ID}/users/${userId}`, {
+    method: 'PATCH',
+    headers: { 'Authorization': suncoAuth(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email })
+  });
+  console.log('Updated Sunco user:', userId, name, email);
 }
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const body = req.body || {};
-  console.log('Received:', JSON.stringify(body));
 
-  // Try conversation_id directly, or look up by end_user_id
-  let conversationId =
-    body.conversation_id ||
-    body.conversationId ||
-    body.conversation?.id;
-
-  // If conversation_id is unresolved template literal, ignore it
-  if (conversationId && conversationId.includes('{{')) conversationId = null;
-
-  if (!conversationId && (body.end_user_id || body.userId)) {
-    const userId = body.end_user_id || body.userId;
-    console.log('Looking up conversation for user:', userId);
-    conversationId = await getConversationByUser(userId);
+  // Called by Zendesk bot integration (no conversation_id available — just ack)
+  if (!body.events) {
+    console.log('Bot integration call — no events, ignoring');
+    return res.status(200).json({ ok: true });
   }
 
-  console.log('Using conversation_id:', conversationId);
+  // Called by Sunco webhook with real events
+  for (const event of body.events) {
+    const { type, payload } = event;
 
-  if (!conversationId) {
-    return res.status(200).json({ ok: false, reason: 'no_conversation_id', received: body });
+    if (type === 'conversation:message') {
+      const { conversation, message } = payload;
+      const convId = conversation.id;
+      const { author, content } = message;
+
+      if (author.type !== 'user') continue;
+
+      // User submitted the form
+      if (content.type === 'formResponse') {
+        const name  = content.fields?.find(f => f.name === 'name')?.value  || '';
+        const email = content.fields?.find(f => f.name === 'email')?.value || '';
+        console.log('Form submitted:', name, email, 'conv:', convId);
+        if (author.userId) await updateSuncoUser(author.userId, name, email);
+        continue;
+      }
+
+      // User requested an agent via text
+      const text = (content.text || '').toLowerCase();
+      if (AGENT_KEYWORDS.some(kw => text.includes(kw))) {
+        await sendAgentForm(convId);
+      }
+    }
+
+    // User clicked a button (postback)
+    if (type === 'conversation:postback') {
+      const { conversation, postback } = payload;
+      console.log('Postback:', postback.payload, 'conv:', conversation.id);
+      const p = (postback.payload || '').toLowerCase();
+      if (p.includes('agent') || p.includes('contact') || p.includes('human')) {
+        await sendAgentForm(conversation.id);
+      }
+    }
   }
 
-  const result = await sendAgentForm(conversationId);
-  res.status(200).json({ ok: result.status === 201, sunco_status: result.status, conversation_id_used: conversationId });
+  res.status(200).json({ ok: true });
 };
